@@ -199,7 +199,6 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
     }
     @Override public Value visitNotification(JuniorParser.NotificationContext ctx) {
         Value v = visit(ctx.expression());
-        if (v.type != Type.MELDUNG) throw error(ctx, "melden requiere una expresión de tipo meldung; se obtuvo " + v.type);
         System.out.println("Notificación: " + v.value);
         return null;
     }

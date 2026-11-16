@@ -1,6 +1,9 @@
 package com.example;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -11,15 +14,38 @@ import org.antlr.v4.runtime.Recognizer;
 public class Main {
 
     private static final String EXTENSION = "jr";
-    private static final String DIRBASE = "src/test/resources/";
+    private static final Path DIRBASE = Paths.get("src", "test", "resources");
+
+    private static Path resolveFile(String file) throws IOException {
+        // Quita separadores finales accidentales, por ejemplo "test.jr\\".
+        String cleanFile = file.trim().replaceAll("[\\\\/]+$", "");
+        Path requested = Paths.get(cleanFile);
+
+        if (Files.exists(requested)) {
+            return requested;
+        }
+
+        Path fromDemo = DIRBASE.resolve(requested);
+        if (Files.exists(fromDemo)) {
+            return fromDemo;
+        }
+
+        Path fromRepository = Paths.get("demo").resolve(DIRBASE).resolve(requested);
+        if (Files.exists(fromRepository)) {
+            return fromRepository;
+        }
+
+        throw new IOException("No se encontró el archivo Junior: " + file
+                + ". Se buscó en " + requested.toAbsolutePath() + " y en las carpetas de recursos.");
+    }
 
     public static void main(String[] args) throws IOException {
         String files[] = args.length==0? new String[]{ "test." + EXTENSION } : args;
-        System.out.println("Dirbase: " + DIRBASE);
         for (String file : files){
-            System.out.println("START: " + file);
+            Path inputFile = resolveFile(file);
+            System.out.println("START: " + inputFile);
 
-            CharStream in = CharStreams.fromFileName(DIRBASE + file);
+            CharStream in = CharStreams.fromPath(inputFile);
             JuniorLexer lexer = new JuniorLexer(in);
             lexer.removeErrorListeners();
             lexer.addErrorListener(new BaseErrorListener() {

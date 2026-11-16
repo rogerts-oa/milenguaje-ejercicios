@@ -1,1 +1,5 @@
-hello world
+haus #Casa# &
+    wert pegel temperatura = 22;
+    wert meldung saludo = #Hola#;
+    melden temperatura;
+&
