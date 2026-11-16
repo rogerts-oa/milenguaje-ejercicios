@@ -52,7 +52,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         System.out.println("Programa Junior: " + ctx.TEXTWERT().getText());
         return null;
     }
-    @Override public Value visitBlock(JuniorParser.BlockContext ctx) {
+    @Override public Value visitBlock(BlockContext ctx) {
         for (JuniorParser.StatementContext s : ctx.statement()) visit(s);
         return null;
     }
@@ -87,15 +87,18 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         currentRoom = previous;
         return null;
     }
-    @Override public Value visitDeviceDeclaration(JuniorParser.DeviceDeclarationContext ctx) {
+    @Override public Value visitDeviceDeclaration(DeviceDeclarationContext ctx) {
         String name = ctx.KENNUNG().getText();
         if (currentRoom == null) throw error(ctx, "los dispositivos deben declararse dentro de una habitación");
         if (currentRoom.containsKey(name)) throw error(ctx, "dispositivo duplicado '" + name + "' en la habitación");
-        Device device = new Device(ctx.deviceKind().getText().toLowerCase());
+        Device device = new Device(visit(ctx.deviceKind()).value.toString().toLowerCase());
         currentRoom.put(name, device);
         return null;
     }
-    @Override public Value visitDataType(JuniorParser.DataTypeContext ctx) {
+    @Override public Value visitDeviceKind(DeviceKindContext ctx) {
+        return new Value(Type.MELDUNG, ctx.getText());
+    }
+    @Override public Value visitDataType(DataTypeContext ctx) {
         if (ctx.PEGEL() != null) return new Value(Type.PEGEL, null);
         if (ctx.MELDUNG() != null) return new Value(Type.MELDUNG, null);
         if (ctx.SCHALTZUSTAND() != null) return new Value(Type.SCHALTZUSTAND, null);
@@ -114,7 +117,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         tablaSimbolos.put(id, variable);
         return variable;
     }
-    @Override public Value visitAssignment(JuniorParser.AssignmentContext ctx) {
+    @Override public Value visitAssignment(AssignmentContext ctx) {
         String id = ctx.KENNUNG().getText();
         Value old = tablaSimbolos.get(id);
         if (old == null) throw error(ctx, "variable '" + id + "' no declarada");
@@ -124,7 +127,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         tablaSimbolos.put(id, variable);
         return variable;
     }
-    @Override public Value visitDecision(JuniorParser.DecisionContext ctx) {
+    @Override public Value visitDecision(DecisionContext ctx) {
         Value condition = require(ctx, visit(ctx.expression(0)), Type.SCHALTZUSTAND, "la condición de lage");
         if (truth(condition)) {
             visit(ctx.block(0));
@@ -149,11 +152,11 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         }
         return null;
     }
-    @Override public Value visitAutomation(JuniorParser.AutomationContext ctx) { visit(ctx.eventSource()); visit(ctx.block()); return null; }
+    @Override public Value visitAutomation(AutomationContext ctx) { visit(ctx.eventSource()); visit(ctx.block()); return null; }
     @Override public Value visitEventSource(JuniorParser.EventSourceContext ctx) {
         if (ctx.deviceReference() != null) {
             Device d = resolve(ctx.deviceReference());
-            String event = ctx.eventKind().getText().toLowerCase();
+            String event = visit(ctx.eventKind()).value.toString().toLowerCase();
             String k = d.kind;
             boolean valid = false;
             if (event.equals("bewegung") && k.equals("sensor")) valid = true;
@@ -162,8 +165,9 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
             else if (event.equals("temperatur") && (k.equals("klima") || k.equals("sensor"))) valid = true;
             if (!valid) throw error(ctx, "evento '" + event + "' no es compatible con dispositivo tipo '" + k + "'");
             if (ctx.comparison() != null) {
+                String comparison = visit(ctx.comparison()).value.toString();
                 Value rhs = visit(ctx.expression());
-                if (!event.equals("temperatur")) throw error(ctx, "solo el evento temperatur admite comparación con valor");
+                if (!event.equals("temperatur")) throw error(ctx, "el evento " + event + " no admite la comparación " + comparison);
                 if (rhs.type != Type.PEGEL) throw error(ctx, "la comparación de evento temperatura requiere pegel");
             }
         } else {
@@ -171,7 +175,13 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         }
         return null;
     }
-    @Override public Value visitDeviceReference(JuniorParser.DeviceReferenceContext ctx) {
+    @Override public Value visitEventKind(EventKindContext ctx) {
+        return new Value(Type.MELDUNG, ctx.getText());
+    }
+    @Override public Value visitComparison(ComparisonContext ctx) {
+        return new Value(Type.MELDUNG, ctx.getText());
+    }
+    @Override public Value visitDeviceReference(DeviceReferenceContext ctx) {
         resolve(ctx); return null;
     }
     private Device resolve(JuniorParser.DeviceReferenceContext ctx) {
@@ -182,7 +192,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         if (found == null) throw error(ctx, "dispositivo '" + device + "' no existe en habitación '" + room + "'");
         return found;
     }
-    @Override public Value visitDeviceAction(JuniorParser.DeviceActionContext ctx) { visit(ctx.targets()); return null; }
+    @Override public Value visitDeviceAction(DeviceActionContext ctx) { visit(ctx.targets()); return null; }
     @Override public Value visitTargets(JuniorParser.TargetsContext ctx) {
         for (JuniorParser.DeviceReferenceContext ref : ctx.deviceReference()) resolve(ref);
         return null;
@@ -210,7 +220,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
             result = new Value(Type.SCHALTZUSTAND, truth(result) && truth(rhs));
         } return result;
     }
-    @Override public Value visitEquality(JuniorParser.EqualityContext ctx) {
+    @Override public Value visitEquality(EqualityContext ctx) {
         Value result = visit(ctx.relational(0));
         for (int i=1;i<ctx.relational().size();i++) {
             Value rhs = visit(ctx.relational(i)); String op = ctx.getChild(2*i-1).getText();
@@ -245,7 +255,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
             result = new Value(Type.SCHALTZUSTAND, answer);
         } return result;
     }
-    @Override public Value visitAdditive(JuniorParser.AdditiveContext ctx) {
+    @Override public Value visitAdditive(AdditiveContext ctx) {
         Value result = visit(ctx.multiplicative(0));
         for(int i=1;i<ctx.multiplicative().size();i++) {
             Value rhs=visit(ctx.multiplicative(i)); String op=ctx.getChild(2*i-1).getText();
