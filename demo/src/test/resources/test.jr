@@ -1,5 +1,54 @@
-haus #Casa# &
+haus #Casa Junior# &
+    // Habitaciones y dispositivos
+    zimmer cocina &
+        geraet sensorMovimiento: sensor;
+        geraet termostato: klima;
+        geraet luz: licht;
+        geraet puerta: tuer;
+        geraet alarma: alarm;
+    &
+
+    // Variables de todos los tipos de Junior
     wert pegel temperatura = 22;
-    wert meldung saludo = #Hola#;
+    wert pegel limite = 25;
+    wert pegel intentos = 0;
+    wert pegel promedio = ~temperatura + limite~ / 2;
+    wert meldung mensaje = #Temperatura actual # + temperatura + # grados#;
+    wert schaltzustand alarmaActiva = an;
+    wert zeitpunkt horaProgramada = 08:30;
+
+    // Notificaciones de distintos tipos
+    melden mensaje;
     melden temperatura;
+    melden alarmaActiva;
+    melden horaProgramada;
+
+    // Asignaciones y operaciones
+    setzen temperatura = temperatura + 1;
+    setzen mensaje = mensaje + #. Revisando la casa.#;
+    setzen alarmaActiva = !alarmaActiva;
+
+    // Condiciones numéricas, lógicas y de hora
+    lage ~ temperatura >= limite && alarmaActiva == aus ~
+        & melden #Temperatura alta y alarma desactivada#; &
+    zweig ~ horaProgramada >= 08:00 && horaProgramada <= 22:00 ~
+        & melden #La hora está dentro del horario permitido#; &
+    ersatzweg
+        & melden #No se cumple ninguna condición#; &
+
+    // Repetición con condición que termina después de tres vueltas
+    regelkreis ~ intentos < 3 ~
+        &
+            setzen intentos = intentos + 1;
+        &
+
+    // Acciones y automatizaciones de dispositivos
+    einschalten cocina.luz;
+    ausschalten cocina.alarma;
+
+    beiEreignis cocina.sensorMovimiento.bewegung
+        & melden #Se detectó movimiento#; &
+
+    beiEreignis cocina.termostato.temperatur >= 20
+        & melden #El termostato reporta temperatura alta#; &
 &

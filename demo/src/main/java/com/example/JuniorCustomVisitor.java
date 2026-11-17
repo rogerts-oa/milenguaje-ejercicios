@@ -4,19 +4,7 @@ import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Objects;
 
-import com.example.JuniorParser.AdditiveContext;
-import com.example.JuniorParser.AssignmentContext;
-import com.example.JuniorParser.AutomationContext;
-import com.example.JuniorParser.BlockContext;
-import com.example.JuniorParser.ComparisonContext;
-import com.example.JuniorParser.DataTypeContext;
-import com.example.JuniorParser.DecisionContext;
-import com.example.JuniorParser.DeviceActionContext;
-import com.example.JuniorParser.DeviceDeclarationContext;
-import com.example.JuniorParser.DeviceKindContext;
-import com.example.JuniorParser.DeviceReferenceContext;
-import com.example.JuniorParser.EqualityContext;
-import com.example.JuniorParser.EventKindContext;
+import com.example.JuniorParser.*;
 import com.example.Value.Type;
 import org.antlr.v4.runtime.ParserRuleContext;
 
@@ -41,22 +29,27 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         if (v.type != expected) throw error(ctx, purpose + " requiere " + expected + "; se obtuvo " + v.type);
         return v;
     }
+    private Value getVariable(ParserRuleContext ctx, String name) {
+        Value variable = tablaSimbolos.get(name);
+        if (variable == null) throw error(ctx, "variable '" + name + "' no declarada");
+        return variable;
+    }
     private boolean truth(Value v) { return (Boolean) v.value; }
     private String unescape(String s) {
         String body = s.substring(1, s.length() - 1);
         return body.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\#", "#").replace("\\\\", "\\");
     }
 
-    @Override public Value visitProgram(JuniorParser.ProgramContext ctx) {
-        visit(ctx.block());
+    @Override public Value visitProgram(ProgramContext ctx) {
         System.out.println("Programa Junior: " + ctx.TEXTWERT().getText());
+        visit(ctx.block());
         return null;
     }
     @Override public Value visitBlock(BlockContext ctx) {
-        for (JuniorParser.StatementContext s : ctx.statement()) visit(s);
+        for (StatementContext s : ctx.statement()) visit(s);
         return null;
     }
-    @Override public Value visitStatement(JuniorParser.StatementContext ctx) {
+    @Override public Value visitStatement(StatementContext ctx) {
         if (ctx.roomDeclaration() != null) {
             return visit(ctx.roomDeclaration());
         } else if (ctx.variableDeclaration() != null) {
@@ -76,14 +69,14 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         }
         return null;
     }
-    @Override public Value visitRoomDeclaration(JuniorParser.RoomDeclarationContext ctx) {
+    @Override public Value visitRoomDeclaration(RoomDeclarationContext ctx) {
         String name = ctx.KENNUNG().getText();
         if (rooms.containsKey(name)) throw error(ctx, "la habitación '" + name + "' ya fue declarada");
         HashMap<String, Device> room = new HashMap<>();
         rooms.put(name, room);
         HashMap<String, Device> previous = currentRoom;
         currentRoom = room;
-        for (JuniorParser.DeviceDeclarationContext d : ctx.deviceDeclaration()) visit(d);
+        for (DeviceDeclarationContext d : ctx.deviceDeclaration()) visit(d);
         currentRoom = previous;
         return null;
     }
@@ -104,7 +97,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         if (ctx.SCHALTZUSTAND() != null) return new Value(Type.SCHALTZUSTAND, null);
         return new Value(Type.ZEITPUNKT, null);
     }
-    @Override public Value visitVariableDeclaration(JuniorParser.VariableDeclarationContext ctx) {
+    @Override public Value visitVariableDeclaration(VariableDeclarationContext ctx) {
         String id = ctx.KENNUNG().getText();
         if (tablaSimbolos.containsKey(id)) throw error(ctx, "la variable '" + id + "' ya fue declarada");
         Type type = visit(ctx.dataType()).type;
@@ -119,8 +112,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
     }
     @Override public Value visitAssignment(AssignmentContext ctx) {
         String id = ctx.KENNUNG().getText();
-        Value old = tablaSimbolos.get(id);
-        if (old == null) throw error(ctx, "variable '" + id + "' no declarada");
+        Value old = getVariable(ctx, id);
         Value value = visit(ctx.expression());
         if (old.type != value.type) throw error(ctx, "no se puede asignar " + value.type + " a " + old.type + " ('" + id + "')");
         Value variable = new Value(id, old.type, value.value);
@@ -141,7 +133,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         }
         return null;
     }
-    @Override public Value visitRepetition(JuniorParser.RepetitionContext ctx) {
+    @Override public Value visitRepetition(RepetitionContext ctx) {
         Value c = require(ctx, visit(ctx.expression()), Type.SCHALTZUSTAND, "la condición de regelkreis");
         // Repetition is intentionally bounded against accidental infinite programs.
         int iterations = 0;
@@ -153,7 +145,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         return null;
     }
     @Override public Value visitAutomation(AutomationContext ctx) { visit(ctx.eventSource()); visit(ctx.block()); return null; }
-    @Override public Value visitEventSource(JuniorParser.EventSourceContext ctx) {
+    @Override public Value visitEventSource(EventSourceContext ctx) {
         if (ctx.deviceReference() != null) {
             Device d = resolve(ctx.deviceReference());
             String event = visit(ctx.eventKind()).value.toString().toLowerCase();
@@ -184,7 +176,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
     @Override public Value visitDeviceReference(DeviceReferenceContext ctx) {
         resolve(ctx); return null;
     }
-    private Device resolve(JuniorParser.DeviceReferenceContext ctx) {
+    private Device resolve(DeviceReferenceContext ctx) {
         String room = ctx.KENNUNG(0).getText(), device = ctx.KENNUNG(1).getText();
         HashMap<String, Device> contents = rooms.get(room);
         if (contents == null) throw error(ctx, "habitación '" + room + "' no declarada");
@@ -193,26 +185,26 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         return found;
     }
     @Override public Value visitDeviceAction(DeviceActionContext ctx) { visit(ctx.targets()); return null; }
-    @Override public Value visitTargets(JuniorParser.TargetsContext ctx) {
-        for (JuniorParser.DeviceReferenceContext ref : ctx.deviceReference()) resolve(ref);
+    @Override public Value visitTargets(TargetsContext ctx) {
+        for (DeviceReferenceContext ref : ctx.deviceReference()) resolve(ref);
         return null;
     }
-    @Override public Value visitNotification(JuniorParser.NotificationContext ctx) {
+    @Override public Value visitNotification(NotificationContext ctx) {
         Value v = visit(ctx.expression());
         System.out.println("Notificación: " + v.value);
         return null;
     }
-    @Override public Value visitExpression(JuniorParser.ExpressionContext ctx) {
+    @Override public Value visitExpression(ExpressionContext ctx) {
         return visit(ctx.logicalOr());
     }
-    @Override public Value visitLogicalOr(JuniorParser.LogicalOrContext ctx) {
+    @Override public Value visitLogicalOr(LogicalOrContext ctx) {
         Value result = visit(ctx.logicalAnd(0));
         for (int i=1;i<ctx.logicalAnd().size();i++) {
             Value rhs = visit(ctx.logicalAnd(i)); require(ctx, result, Type.SCHALTZUSTAND, "||"); require(ctx, rhs, Type.SCHALTZUSTAND, "||");
             result = new Value(Type.SCHALTZUSTAND, truth(result) || truth(rhs));
         } return result;
     }
-    @Override public Value visitLogicalAnd(JuniorParser.LogicalAndContext ctx) {
+    @Override public Value visitLogicalAnd(LogicalAndContext ctx) {
         Value result = visit(ctx.equality(0));
         for (int i=1;i<ctx.equality().size();i++) {
             Value rhs = visit(ctx.equality(i)); require(ctx, result, Type.SCHALTZUSTAND, "&&"); require(ctx, rhs, Type.SCHALTZUSTAND, "&&");
@@ -234,7 +226,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
             }
         } return result;
     }
-    @Override public Value visitRelational(JuniorParser.RelationalContext ctx) {
+    @Override public Value visitRelational(RelationalContext ctx) {
         Value result = visit(ctx.additive(0));
         for (int i=1;i<ctx.additive().size();i++) {
             Value rhs = visit(ctx.additive(i)); String op = ctx.getChild(2*i-1).getText();
@@ -258,7 +250,9 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         Value result = visit(ctx.multiplicative(0));
         for(int i=1;i<ctx.multiplicative().size();i++) {
             Value rhs=visit(ctx.multiplicative(i)); String op=ctx.getChild(2*i-1).getText();
-            if(op.equals("+") && result.type==Type.MELDUNG && rhs.type==Type.MELDUNG) result=new Value(Type.MELDUNG, result.value.toString()+rhs.value);
+            if (op.equals("+") && (result.type == Type.MELDUNG || rhs.type == Type.MELDUNG)) {
+                result = new Value(Type.MELDUNG, String.valueOf(result.value) + String.valueOf(rhs.value));
+            }
             else {
                 if(result.type!=Type.PEGEL || rhs.type!=Type.PEGEL) throw error(ctx,"'"+op+"' requiere pegel; no se pueden operar "+result.type+" y "+rhs.type);
                 double a=((Number)result.value).doubleValue(), b=((Number)rhs.value).doubleValue();
@@ -267,7 +261,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
             }
         } return result;
     }
-    @Override public Value visitMultiplicative(JuniorParser.MultiplicativeContext ctx) {
+    @Override public Value visitMultiplicative(MultiplicativeContext ctx) {
         Value result=visit(ctx.unary(0));
         for(int i=1;i<ctx.unary().size();i++) {
             Value rhs=visit(ctx.unary(i)); String op=ctx.getChild(2*i-1).getText();
@@ -278,7 +272,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
             else result = new Value(Type.PEGEL, a / b);
         } return result;
     }
-    @Override public Value visitUnary(JuniorParser.UnaryContext ctx) {
+    @Override public Value visitUnary(UnaryContext ctx) {
         if (ctx.primary() != null) {
             return visit(ctx.primary());
         }
@@ -295,7 +289,7 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         }
         return value;
     }
-    @Override public Value visitPrimary(JuniorParser.PrimaryContext ctx) {
+    @Override public Value visitPrimary(PrimaryContext ctx) {
         if (ctx.ZAHL() != null) {
             return new Value(Type.PEGEL, Double.parseDouble(ctx.ZAHL().getText()));
         } else if (ctx.TEXTWERT() != null) {
@@ -313,12 +307,14 @@ public class JuniorCustomVisitor extends JuniorBaseVisitor<Value> {
         }
         return null;
     }
-    @Override public Value visitReference(JuniorParser.ReferenceContext ctx) {
+    @Override public Value visitReference(ReferenceContext ctx) {
         if(ctx.UHR()!=null) return new Value(Type.ZEITPUNKT, LocalTime.now());
-        String id=ctx.KENNUNG(0).getText(); Value value=tablaSimbolos.get(id);
-        if (value == null) throw error(ctx, "variable '" + id + "' no declarada");
+        if (ctx.KENNUNG().size() > 1) {
+            throw error(ctx, "referencia calificada inválida para variable: '" + ctx.getText() + "'");
+        }
+        String id = ctx.KENNUNG(0).getText();
+        Value value = getVariable(ctx, id);
         if (value.value == null) throw error(ctx, "variable '" + id + "' todavía no tiene un valor asignado");
-        if(ctx.KENNUNG().size()>1) throw error(ctx,"referencia calificada inválida para variable: '"+ctx.getText()+"'");
         return value;
     }
 }
